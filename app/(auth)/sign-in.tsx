@@ -1,0 +1,232 @@
+import {  CodeSchema, SignInFormSchemaValue, SignInSchema } from "@/lib/schemas/auth";
+import { useSignIn } from "@clerk/expo";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Link, useRouter } from "expo-router";
+import { Controller, useForm } from "react-hook-form";
+import { View, Text, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Image, Platform, TextInput } from "react-native";
+
+export default function SignIn() {
+
+  const {signIn, errors, fetchStatus} = useSignIn()
+  const isLoading = fetchStatus === "fetching"
+  const router = useRouter()
+
+
+  const {
+    control,handleSubmit,formState:{errors:formErrors},} = useForm<SignInFormSchemaValue>({
+      resolver:zodResolver(SignInSchema),
+      mode:"onBlur",
+      defaultValues:{email:"",password:""}
+    });
+
+
+   const {
+    control:codeControl,
+    handleSubmit:handleCodeSubmit,
+    formState:{errors:codeErrors},
+   } = useForm<{code:string}>({
+      resolver:zodResolver(CodeSchema),
+      mode:"onBlur",
+      defaultValues:{code:""}
+    })
+
+
+const onSignInPress = async (values:SignInFormSchemaValue)=>{
+     
+      const {error}= await signIn.password({
+        
+        emailAddress:values.email,
+        password:values.password
+      })
+      if(error) return
+      if(signIn.status === "complete"){
+        await signIn.finalize({
+          navigate:({session,decorateUrl})=>{
+            if(session?.currentTask) return
+            const url = decorateUrl("/")
+            router.replace(url as any)
+          }
+        })
+      }else if(signIn.status === "needs_second_factor"){
+        await signIn.mfa.sendPhoneCode()
+        
+        
+      }else if(signIn.status === "needs_client_trust"){
+        const emailCodeFactor = signIn.supportedSecondFactors.find(
+          (factor)=> factor.strategy === "email_code"
+        )
+        if(emailCodeFactor) return await signIn.mfa.sendEmailCode()
+      }else{
+        console.error("Sign up not complete",signIn)
+      }
+      
+      }
+
+      const onVerifyCodePress = async ({code}:{code:string})=>{
+      await signIn.mfa.verifyEmailCode({code})
+
+      if(signIn.status === "complete"){
+        await signIn.finalize({
+          navigate:({session,decorateUrl})=>{
+            if(session?.currentTask) return
+            const url = decorateUrl("/")
+            router.replace(url as any)
+          }
+        })
+      }else{
+        console.error("Sign up not complete",signIn)
+      }
+     };
+   
+     if(signIn.status === "needs_client_trust"){
+      return (
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1 bg-brand-body" >
+          <View className="flex-1 justify-center px-6 -mt-16">
+            <Image
+            source={require("../../assets/images/welth.png")}
+            className="w-36 h-16  mb-8"
+            resizeMode="contain"
+            />
+            <Text className="text-3xl font-bold text-[#1A1AD26] mb-2 leading-tight">Verify your account</Text>
+            <Controller 
+          control={codeControl}
+          name="code"
+          render={({field:{onChange,onBlur,value}})=>{
+            return (
+              <TextInput className=" border mb-2  border-[#E8E6DF] bg-white
+               rounded-xl px-4 py-3 text-[#1A1D26] "
+               placeholder="Verification Code"
+               placeholderTextColor="#8A8D69"
+               value={value}
+                onChangeText={onChange}
+                onBlur={onBlur}
+              />
+
+            )
+          }
+          }
+        />
+        {codeErrors.code && (
+          <Text className="text-brand-coral text-sm mb-2">{codeErrors.code.message}</Text>
+        )}
+        {errors.fields.code &&(
+          <Text className="text-brand-coral text-sm mb-2">{errors.fields.code.message}</Text>
+        )}
+        <TouchableOpacity onPress={handleCodeSubmit(onVerifyCodePress)}
+      disabled={isLoading}
+      
+      className="w-full bg-brand-blue py-4 rounded-xl items-center mb-4">
+        {isLoading ? (
+          <ActivityIndicator color="white" />
+        ):(
+          <Text className="text-white font-bold text-base">Verify</Text>
+        )}
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={()=>signIn.mfa.sendEmailCode()} className="py-2">
+        <Text className="text-brand-blue font-bold text-sm"> I need a new code</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={()=> signIn.reset()} className="py-2">
+        <Text className="text-brand-blue font-bold text-sm">Change Email</Text>
+      </TouchableOpacity>
+          </View>
+
+        </KeyboardAvoidingView>
+      )
+
+     }
+
+
+    return (
+   <KeyboardAvoidingView  behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1 bg-brand-body">
+
+    <View className="flex-1  justify-center px-6 -mt-16">  
+      <Image
+      source={require("../../assets/images/welth.png")}
+      className="w-36 h-16  mb-8"
+      resizeMode="contain"
+      />
+      <Text className="text-3xl font-bold text-[#1A1D26] mb-4 leading-tight">welcome back</Text>
+      <Text className="text-base text-brand-text-muted mb-8 ">Sign in to your account</Text>
+      
+      
+       <Controller 
+          control={control}
+          name="email"
+          render={({field:{onChange,onBlur,value}})=>{
+            return (
+              <TextInput className=" border mb-2  border-[#E8E6DF] bg-white
+               rounded-xl px-4 py-3 text-[#1A1D26] "
+               placeholder="Email"
+               placeholderTextColor="#8A8D69"
+               value={value}
+                onChangeText={onChange}
+                onBlur={onBlur}
+                autoCapitalize="none"
+              />
+
+            )
+          }
+          }
+        />
+        {formErrors.email && (
+          <Text className="text-brand-coral text-sm mb-2">{formErrors.email.message}
+          </Text>
+        )}
+        {errors.fields.identifier &&(
+          <Text className="text-brand-coral text-sm mb-2">{errors.fields.identifier.message}</Text>
+        )}
+        <Controller 
+          control={control}
+          name="password"
+          render={({field:{onChange,onBlur,value}})=>{
+            return (
+              <TextInput className=" border mb-2 border-[#E8E6DF] bg-white
+               rounded-xl px-4 py-3 text-[#1A1D26] "
+               placeholder="Password"
+               placeholderTextColor="#8A8D69"
+               value={value}
+                onChangeText={onChange}
+                onBlur={onBlur}
+                
+                secureTextEntry
+              />
+
+            )
+          }
+          }
+        />
+        {formErrors.password && (
+          <Text className="text-brand-coral text-sm mb-2">{formErrors.password.message}
+          </Text>
+        )}
+        {errors.fields.password &&(
+          <Text className="text-brand-coral text-sm mb-2">{errors.fields.password.message}</Text>
+        )}
+      
+      <TouchableOpacity onPress={handleSubmit(onSignInPress)}
+      disabled={isLoading}
+      
+      className="w-full bg-brand-blue py-4 rounded-xl items-center mb-4">
+        {isLoading ? (
+          <ActivityIndicator color="white" />
+        ):(
+          <Text className="text-white font-bold text-base">Sign In</Text>
+        )}
+      </TouchableOpacity>
+      <View className="flex-row justify-center">
+        <Text className="text-brand-text-muted text-sm">Don&apos;t have an account?{" "} </Text>
+        <Link href="/sign-up">
+          <Text className="text-brand-blue font-bold text-sm">Sign Up</Text>
+        </Link>
+
+      </View>
+
+      
+
+    </View>
+    
+   </KeyboardAvoidingView>
+  );
+}
